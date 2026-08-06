@@ -2,7 +2,7 @@ import os
 import base64
 from pathlib import Path
 import pandas as pd
-import matplotlib.pyplot as plt  # type: ignore[import-not-found]
+import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
 
@@ -27,6 +27,104 @@ TEAM_NAMES = {
     'DCH': 'Deccan Chargers'
 }
 
+
+def compute_batting_insights(combined_df, min_balls=50, sort_by='runs'):
+    """Return batters with runs, balls faced, and strike rate."""
+    batter_col = 'batter' if 'batter' in combined_df.columns else 'batsman'
+    runs_col = 'batsman_runs' if 'batsman_runs' in combined_df.columns else 'batsman_run'
+
+    if batter_col not in combined_df.columns or runs_col not in combined_df.columns:
+        return pd.DataFrame(columns=['runs', 'balls_faced', 'strike_rate'])
+
+    batting_df = combined_df[[batter_col, runs_col]].copy()
+    batting_df = batting_df.dropna(subset=[batter_col])
+    batting_df['balls_faced'] = 1
+
+    batting_stats = batting_df.groupby(batter_col, dropna=False).agg(
+        runs=(runs_col, 'sum'),
+        balls_faced=('balls_faced', 'count')
+    )
+    batting_stats['strike_rate'] = (
+        batting_stats['runs'] / batting_stats['balls_faced'] * 100
+    ).round(2)
+
+    filtered_stats = batting_stats[batting_stats['balls_faced'] >= min_balls]
+
+    if sort_by == 'strike_rate':
+        return filtered_stats.sort_values(['strike_rate', 'runs'], ascending=[False, False])
+
+    return filtered_stats.sort_values(['runs', 'strike_rate'], ascending=[False, False])
+
+
+def compute_bowling_insights(combined_df, min_balls=30, sort_by='wickets'):
+    """Return bowlers with runs conceded, balls bowled, wickets, and economy."""
+    if 'bowler' not in combined_df.columns:
+        return pd.DataFrame(columns=['runs_conceded', 'balls_bowled', 'wickets', 'economy_rate'])
+
+    bowling_df = combined_df[['bowler', 'total_runs', 'ball', 'dismissal_kind']].copy()
+    bowling_df = bowling_df.dropna(subset=['bowler'])
+    bowling_df['balls_bowled'] = 1
+
+    bowling_stats = bowling_df.groupby('bowler', dropna=False).agg(
+        runs_conceded=('total_runs', 'sum'),
+        balls_bowled=('balls_bowled', 'count')
+    )
+
+    valid_dismissals = (
+        bowling_df['dismissal_kind'].notna() &
+        bowling_df['dismissal_kind'].ne('run out') &
+        bowling_df['dismissal_kind'].astype(str).str.strip().ne('')
+    )
+    wickets = bowling_df.loc[valid_dismissals].groupby('bowler', dropna=False).size()
+
+    bowling_stats['wickets'] = wickets.reindex(bowling_stats.index).fillna(0).astype(int)
+    bowling_stats['economy_rate'] = (
+        bowling_stats['runs_conceded'] / bowling_stats['balls_bowled'] * 6
+    ).round(2)
+
+    filtered_stats = bowling_stats[bowling_stats['balls_bowled'] >= min_balls]
+
+    if sort_by == 'economy_rate':
+        return filtered_stats.sort_values(['economy_rate', 'wickets'], ascending=[True, False])
+
+    return filtered_stats.sort_values(['wickets', 'economy_rate'], ascending=[False, True])
+
+
+def get_featured_insights(combined_df):
+    """Return all-time top run scorer and wicket taker values for the overview cards."""
+    batter_col = 'batter' if 'batter' in combined_df.columns else 'batsman'
+    runs_col = 'batsman_runs' if 'batsman_runs' in combined_df.columns else 'batsman_run'
+
+    if batter_col in combined_df.columns and runs_col in combined_df.columns:
+        batting_totals = combined_df[[batter_col, runs_col]].dropna(subset=[batter_col]).groupby(batter_col)[runs_col].sum()
+        top_batsman_name = batting_totals.sort_values(ascending=False).index[0] if not batting_totals.empty else 'N/A'
+        top_batsman_value = int(batting_totals.sort_values(ascending=False).iloc[0]) if not batting_totals.empty else 0
+    else:
+        top_batsman_name = 'N/A'
+        top_batsman_value = 0
+
+    if 'bowler' in combined_df.columns:
+        bowling_rows = combined_df[['bowler', 'dismissal_kind']].dropna(subset=['bowler'])
+        valid_wickets = bowling_rows[
+            bowling_rows['dismissal_kind'].notna() &
+            (bowling_rows['dismissal_kind'] != 'run out') &
+            (bowling_rows['dismissal_kind'].astype(str).str.strip() != '')
+        ]
+        wicket_totals = valid_wickets.groupby('bowler').size()
+        top_bowler_name = wicket_totals.sort_values(ascending=False).index[0] if not wicket_totals.empty else 'N/A'
+        top_bowler_value = int(wicket_totals.sort_values(ascending=False).iloc[0]) if not wicket_totals.empty else 0
+    else:
+        top_bowler_name = 'N/A'
+        top_bowler_value = 0
+
+    return {
+        'top_batsman_name': top_batsman_name,
+        'top_batsman_value': top_batsman_value,
+        'top_bowler_name': top_bowler_name,
+        'top_bowler_value': top_bowler_value,
+    }
+
+
 def get_page_name(page_label: str) -> str:
     """Strip emoji prefixes from sidebar page labels."""
     cleaned = page_label.strip()
@@ -39,6 +137,61 @@ def get_page_name(page_label: str) -> str:
 
 def get_full_team_name(team_abbr: str) -> str:
     return TEAM_NAMES.get(team_abbr, team_abbr)
+
+
+def get_team_summary(matches_df, team_name):
+    """Return simple team summary metrics."""
+    team_matches = matches_df[(matches_df['team1'] == team_name) | (matches_df['team2'] == team_name)]
+    total_matches = len(team_matches)
+    matches_won = int((team_matches['winner'] == team_name).sum())
+    win_percentage = round((matches_won / total_matches * 100) if total_matches else 0, 1)
+    season_wins = team_matches[team_matches['winner'] == team_name]['season'].dropna().value_counts().sort_index()
+
+    return {
+        'total_matches': total_matches,
+        'matches_won': matches_won,
+        'win_percentage': win_percentage,
+        'season_wins': season_wins,
+    }
+
+
+def get_player_summary(combined_df, player_name):
+    """Return player summary metrics across all seasons."""
+    batter_col = 'batter' if 'batter' in combined_df.columns else 'batsman'
+    runs_col = 'batsman_runs' if 'batsman_runs' in combined_df.columns else 'batsman_run'
+
+    batting_rows = combined_df[combined_df[batter_col] == player_name] if batter_col in combined_df.columns else pd.DataFrame()
+    bowling_rows = combined_df[combined_df['bowler'] == player_name] if 'bowler' in combined_df.columns else pd.DataFrame()
+
+    runs = int(batting_rows[runs_col].sum()) if not batting_rows.empty and runs_col in batting_rows.columns else 0
+    balls_faced = int(len(batting_rows)) if not batting_rows.empty else 0
+    strike_rate = round((runs / balls_faced * 100) if balls_faced else 0, 2)
+
+    wickets = 0
+    if not bowling_rows.empty:
+        valid_wickets = bowling_rows[
+            bowling_rows['dismissal_kind'].notna() &
+            (bowling_rows['dismissal_kind'] != 'run out') &
+            (bowling_rows['dismissal_kind'].astype(str).str.strip() != '')
+        ]
+        wickets = int(len(valid_wickets))
+
+    runs_conceded = int(bowling_rows['total_runs'].sum()) if not bowling_rows.empty else 0
+    balls_bowled = int(len(bowling_rows)) if not bowling_rows.empty else 0
+    economy_rate = round((runs_conceded / balls_bowled * 6) if balls_bowled else 0, 2)
+    seasons = sorted(set(batting_rows['season'].tolist() + bowling_rows['season'].tolist()) if not batting_rows.empty or not bowling_rows.empty else [])
+
+    return {
+        'runs': runs,
+        'balls_faced': balls_faced,
+        'strike_rate': strike_rate,
+        'wickets': wickets,
+        'runs_conceded': runs_conceded,
+        'balls_bowled': balls_bowled,
+        'economy_rate': economy_rate,
+        'seasons': seasons,
+    }
+
 
 @st.cache_data(show_spinner=False)
 def load_data():
@@ -63,6 +216,41 @@ def show_overview(matches_df, deliveries_df, combined_df):
 
     # Total wins across all seasons (ignore missing winners)
     all_seasons_wins = matches_df['winner'].dropna().value_counts()
+
+    batting_insights = compute_batting_insights(combined_df, min_balls=50, sort_by='strike_rate')
+    bowling_insights = compute_bowling_insights(combined_df, min_balls=30, sort_by='economy_rate')
+
+    st.subheader('🔍 Featured Insights')
+    total_matches = len(matches_df)
+    runs_col = 'batsman_runs' if 'batsman_runs' in combined_df.columns else 'batsman_run'
+    total_runs = int(combined_df[runs_col].sum()) if runs_col in combined_df.columns else 0
+
+    if 'dismissal_kind' in combined_df.columns:
+        valid_dismissals = combined_df['dismissal_kind'].notna() & (
+            combined_df['dismissal_kind'] != 'run out'
+        ) & (combined_df['dismissal_kind'].astype(str).str.strip() != '')
+        total_wickets = int(valid_dismissals.sum())
+    else:
+        total_wickets = 0
+
+    featured_insights = get_featured_insights(combined_df)
+    top_batsman_name = featured_insights['top_batsman_name']
+    top_bowler_name = featured_insights['top_bowler_name']
+    top_batsman_value = featured_insights['top_batsman_value']
+    top_bowler_value = featured_insights['top_bowler_value']
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric('Total Matches', f'{total_matches:,}')
+    with col2:
+        st.metric('Total Runs', f'{total_runs:,}')
+    with col3:
+        st.metric('Top Run Scorer (All Time)', top_batsman_name, delta=f'{top_batsman_value} runs')
+    with col4:
+        st.metric('Top Wicket Taker (All Time)', top_bowler_name, delta=f'{top_bowler_value} wickets')
+
+    st.caption('These highlight cards use minimum thresholds so the rankings stay meaningful.')
+
     st.subheader('🏆 Total Wins by Teams')
     st.dataframe(
         all_seasons_wins.rename('Total Wins').reset_index().rename(columns={'index': 'Team'}),
@@ -87,19 +275,59 @@ def show_overview(matches_df, deliveries_df, combined_df):
 
     # Top run scorers
     st.subheader('🏏 Top 10 Run Scorers (All Time)')
-    all_time_runs = combined_df.groupby('batter')['batsman_runs'].sum().sort_values(ascending=False)
+    all_time_runs = compute_batting_insights(combined_df, min_balls=1, sort_by='runs')
     st.dataframe(
-        all_time_runs.head(10).rename('Total Runs').reset_index().rename(columns={'batter': 'Batter'}),
+        all_time_runs.head(10).reset_index().rename(columns={
+            'index': 'Batter',
+            'runs': 'Total Runs',
+            'balls_faced': 'Balls Faced',
+            'strike_rate': 'Strike Rate'
+        }),
         height=400
     )
 
+    st.subheader('⚡ Top Strike Rates (Min 50 Balls)')
+    if not batting_insights.empty:
+        st.dataframe(
+            batting_insights.head(10).reset_index().rename(columns={
+                'index': 'Batter',
+                'runs': 'Runs',
+                'balls_faced': 'Balls Faced',
+                'strike_rate': 'Strike Rate'
+            }),
+            height=320
+        )
+    else:
+        st.info('No batting data available for strike-rate ranking.')
+
     # Top wicket takers
     st.subheader('🎯 Top 10 Wicket Takers (All Time)')
-    all_time_wickets = combined_df[combined_df['dismissal_kind'].notna()].groupby('bowler').size().sort_values(ascending=False)
+    all_time_wickets = compute_bowling_insights(combined_df, min_balls=1, sort_by='wickets')
     st.dataframe(
-        all_time_wickets.head(10).rename('Total Wickets').reset_index().rename(columns={'bowler': 'Bowler'}),
+        all_time_wickets.head(10).reset_index().rename(columns={
+            'index': 'Bowler',
+            'runs_conceded': 'Runs Conceded',
+            'balls_bowled': 'Balls Bowled',
+            'wickets': 'Total Wickets',
+            'economy_rate': 'Economy Rate'
+        }),
         height=400
     )
+
+    st.subheader('📉 Top Economy Rates (Min 30 Balls)')
+    if not bowling_insights.empty:
+        st.dataframe(
+            bowling_insights.head(10).reset_index().rename(columns={
+                'index': 'Bowler',
+                'runs_conceded': 'Runs Conceded',
+                'balls_bowled': 'Balls Bowled',
+                'wickets': 'Wickets',
+                'economy_rate': 'Economy Rate'
+            }),
+            height=320
+        )
+    else:
+        st.info('No bowling data available for economy ranking.')
 
 def show_season_analysis(matches_df, selected_season):
     """Display season-specific analysis"""
@@ -155,6 +383,27 @@ def show_season_analysis(matches_df, selected_season):
     season_combined_df = combined_df_temp[combined_df_temp['match_id'].isin(season_match_ids)]
     
     if not season_combined_df.empty:
+        season_batting_insights = compute_batting_insights(season_combined_df, min_balls=50)
+        season_bowling_insights = compute_bowling_insights(season_combined_df, min_balls=30)
+
+        st.subheader('✨ Season Highlights')
+        col1, col2, col3, col4 = st.columns(4)
+        top_batter_name = season_batting_insights.index[0] if not season_batting_insights.empty else 'N/A'
+        top_bowler_name = season_bowling_insights.index[0] if not season_bowling_insights.empty else 'N/A'
+        top_batter_runs = int(season_batting_insights.iloc[0]['runs']) if not season_batting_insights.empty else 0
+        top_batter_sr = float(season_batting_insights.iloc[0]['strike_rate']) if not season_batting_insights.empty else 0.0
+        top_bowler_wickets = int(season_bowling_insights.iloc[0]['wickets']) if not season_bowling_insights.empty else 0
+        top_bowler_economy = float(season_bowling_insights.iloc[0]['economy_rate']) if not season_bowling_insights.empty else 0.0
+
+        with col1:
+            st.metric('Best Batting Runs', top_batter_name, delta=f'{top_batter_runs} runs')
+        with col2:
+            st.metric('Best Strike Rate', top_batter_name, delta=f'{top_batter_sr:.1f}')
+        with col3:
+            st.metric('Most Wickets', top_bowler_name, delta=f'{top_bowler_wickets} wickets')
+        with col4:
+            st.metric('Best Economy', top_bowler_name, delta=f'{top_bowler_economy:.2f}')
+
         # Top 10 Batsmen in the season
         st.subheader(f'🏏 Top 10 Batsmen - Season {selected_season}')
         
@@ -533,6 +782,86 @@ def show_venue_stats(matches_df):
     ax.set_ylabel('Team')
     st.pyplot(fig)
 
+def show_comparison(matches_df, combined_df):
+    """Display comparison dashboard for teams and players."""
+    st.title('🏏 IPL Data Analysis Dashboard')
+    st.header('🔍 Comparison Hub')
+    st.caption('Compare teams and players side by side to uncover standout performers and trends.')
+
+    compare_mode = st.radio('Choose comparison type', ['Team vs Team', 'Player vs Player'], horizontal=True)
+
+    if compare_mode == 'Team vs Team':
+        teams = sorted(pd.concat([matches_df['team1'], matches_df['team2']]).dropna().unique())
+        col1, col2 = st.columns(2)
+        with col1:
+            team1 = st.selectbox('Select Team 1', teams, key='comp_team1')
+        with col2:
+            team2 = st.selectbox('Select Team 2', [t for t in teams if t != team1], key='comp_team2')
+
+        summary1 = get_team_summary(matches_df, team1)
+        summary2 = get_team_summary(matches_df, team2)
+
+        st.subheader(f'{team1} vs {team2}')
+        comparison_df = pd.DataFrame({
+            'Metric': ['Total Matches', 'Matches Won', 'Win Percentage'],
+            team1: [summary1['total_matches'], summary1['matches_won'], f"{summary1['win_percentage']:.1f}%"],
+            team2: [summary2['total_matches'], summary2['matches_won'], f"{summary2['win_percentage']:.1f}%"],
+        })
+        st.dataframe(comparison_df, hide_index=True)
+
+        fig, ax = plt.subplots(figsize=(10, 4))
+        labels = ['Matches Won', 'Win %']
+        values1 = [summary1['matches_won'], summary1['win_percentage']]
+        values2 = [summary2['matches_won'], summary2['win_percentage']]
+        x = range(len(labels))
+        ax.bar([i - 0.2 for i in x], values1, width=0.35, label=team1, color='#FF4B4B')
+        ax.bar([i + 0.2 for i in x], values2, width=0.35, label=team2, color='#4CAF50')
+        ax.set_xticks(list(x))
+        ax.set_xticklabels(labels)
+        ax.set_ylabel('Value')
+        ax.set_title('Team Comparison')
+        ax.legend()
+        plt.tight_layout()
+        st.pyplot(fig)
+    else:
+        batter_col = 'batter' if 'batter' in combined_df.columns else 'batsman'
+        all_batters = sorted(combined_df[batter_col].dropna().unique()) if batter_col in combined_df.columns else []
+        all_bowlers = sorted(combined_df['bowler'].dropna().unique()) if 'bowler' in combined_df.columns else []
+        all_players = sorted(list(set(all_batters + all_bowlers)))
+
+        col1, col2 = st.columns(2)
+        with col1:
+            player1 = st.selectbox('Select Player 1', all_players, key='comp_player1')
+        with col2:
+            player2 = st.selectbox('Select Player 2', [p for p in all_players if p != player1], key='comp_player2')
+
+        summary1 = get_player_summary(combined_df, player1)
+        summary2 = get_player_summary(combined_df, player2)
+
+        st.subheader(f'{player1} vs {player2}')
+        comparison_df = pd.DataFrame({
+            'Metric': ['Runs', 'Balls Faced', 'Strike Rate', 'Wickets', 'Economy Rate', 'Seasons Played'],
+            player1: [summary1['runs'], summary1['balls_faced'], f"{summary1['strike_rate']:.2f}", summary1['wickets'], f"{summary1['economy_rate']:.2f}", len(summary1['seasons'])],
+            player2: [summary2['runs'], summary2['balls_faced'], f"{summary2['strike_rate']:.2f}", summary2['wickets'], f"{summary2['economy_rate']:.2f}", len(summary2['seasons'])],
+        })
+        st.dataframe(comparison_df, hide_index=True)
+
+        fig, ax = plt.subplots(figsize=(10, 4))
+        labels = ['Runs', 'Strike Rate', 'Wickets']
+        values1 = [summary1['runs'], summary1['strike_rate'], summary1['wickets']]
+        values2 = [summary2['runs'], summary2['strike_rate'], summary2['wickets']]
+        x = range(len(labels))
+        ax.bar([i - 0.2 for i in x], values1, width=0.35, label=player1, color='#FF4B4B')
+        ax.bar([i + 0.2 for i in x], values2, width=0.35, label=player2, color='#4CAF50')
+        ax.set_xticks(list(x))
+        ax.set_xticklabels(labels)
+        ax.set_ylabel('Value')
+        ax.set_title('Player Comparison')
+        ax.legend()
+        plt.tight_layout()
+        st.pyplot(fig)
+
+
 def show_head_to_head(matches_df):
     """Display head-to-head analysis"""
     st.title('🏏 IPL Data Analysis Dashboard')
@@ -782,7 +1111,7 @@ def main():
     # Navigation
     page = st.sidebar.radio(
         "Select Page",
-        ["Overview", "Season Analysis", "Team Analysis", "Player Stats", "Venue Stats", "Head to Head"]
+        ["Overview", "Season Analysis", "Team Analysis", "Player Stats", "Venue Stats", "Head to Head", "Comparison Hub"]
     )
     
     # Season selector
@@ -805,6 +1134,8 @@ def main():
         show_venue_stats(matches_df)
     elif page == "Head to Head":
         show_head_to_head(matches_df)
+    elif page == "Comparison Hub":
+        show_comparison(matches_df, combined_df)
 
 if __name__ == '__main__':
     main()

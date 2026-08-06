@@ -12,6 +12,11 @@
     padding: 2rem;
 }
 
+.block-container {
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+}
+
 /* Headers */
 h1 {
     background: linear-gradient(120deg, #FF4B4B 0%, #FF8F8F 100%);
@@ -68,10 +73,16 @@ h2, h3 {
 
 /* Metrics and KPIs */
 .stMetric {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
     padding: 1rem;
     border-left: 4px solid #FF4B4B;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 1.1rem;
+    font-weight: 600;
 }
 
 /* Tables */
