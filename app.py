@@ -1,4 +1,5 @@
 import os
+import base64
 from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt  # type: ignore[import-not-found]
@@ -771,7 +772,11 @@ def main():
     # Sidebar setup
     logo_path = Path(__file__).resolve().parent / 'static' / 'Indian_Premier_League_Official_Logo.svg'
     with open(logo_path, 'rb') as logo_file:
-        st.sidebar.image(logo_file.read(), width=240)
+        logo_data = base64.b64encode(logo_file.read()).decode('utf-8')
+    st.sidebar.markdown(
+        f'<img src="data:image/svg+xml;base64,{logo_data}" style="width:240px; max-width:100%; height:auto; display:block; margin-bottom:0.75rem;" alt="Indian Premier League logo" />',
+        unsafe_allow_html=True,
+    )
     st.sidebar.title("Navigation")
     
     # Navigation
