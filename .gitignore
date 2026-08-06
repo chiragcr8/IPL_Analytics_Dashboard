@@ -4,9 +4,6 @@
 !start.bat
 !matches.csv
 !deliveries.csv
-!static/
-!static/style.css
-!static/Indian_Premier_League_Official_Logo.svg
 !.streamlit/config.toml
 !README.md
 !.gitignore
@@ -23,3 +20,8 @@ __pycache__/
 .vscode/
 .idea/
 *.bak
+
+# Keep selected static assets used by the app
+!static/
+!static/style.css
+!static/Indian_Premier_League_Official_Logo.svg
