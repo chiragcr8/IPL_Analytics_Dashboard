@@ -4,7 +4,9 @@
 !start.bat
 !matches.csv
 !deliveries.csv
+!static/
 !static/style.css
+!static/Indian_Premier_League_Official_Logo.svg
 !.streamlit/config.toml
 !README.md
 !.gitignore
