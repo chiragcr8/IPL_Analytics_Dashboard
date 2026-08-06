@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt  # type: ignore[import-not-found]
 import seaborn as sns
@@ -768,7 +769,9 @@ def main():
         st.session_state.selected_season = seasons[0]
 
     # Sidebar setup
-    st.sidebar.image("https://www.iplt20.com/assets/images/ipl-logo-new-old.png", width=200)
+    logo_path = Path(__file__).resolve().parent / 'static' / 'Indian_Premier_League_Official_Logo.svg'
+    with open(logo_path, 'rb') as logo_file:
+        st.sidebar.image(logo_file.read(), width=240)
     st.sidebar.title("Navigation")
     
     # Navigation
