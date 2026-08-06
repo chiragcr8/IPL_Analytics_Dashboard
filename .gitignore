@@ -1,0 +1,23 @@
+# Keep only essential files
+!app.py
+!requirements.txt
+!start.bat
+!matches.csv
+!deliveries.csv
+!static/style.css
+!.streamlit/config.toml
+!README.md
+!.gitignore
+
+# Ignore everything else
+*
+*/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.log
+.vscode/
+.idea/
+*.bak

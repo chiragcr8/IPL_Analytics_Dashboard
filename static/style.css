@@ -1,0 +1,87 @@
+/* Dashboard Theme */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+/* Global Styles */
+.stApp {
+    font-family: 'Poppins', sans-serif;
+}
+
+/* Main container */
+.main {
+    background: linear-gradient(135deg, #0E1117 0%, #1A1C24 100%);
+    padding: 2rem;
+}
+
+/* Headers */
+h1 {
+    background: linear-gradient(120deg, #FF4B4B 0%, #FF8F8F 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 700;
+    padding: 1rem 0;
+    text-align: center;
+}
+
+h2, h3 {
+    color: #FAFAFA;
+    font-weight: 600;
+    margin-top: 2rem;
+}
+
+/* Charts and Plots */
+.plotly-chart, .stplot {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s;
+}
+
+.plotly-chart:hover, .stplot:hover {
+    transform: translateY(-5px);
+}
+
+/* Selectbox styling */
+.stSelectbox > div > div {
+    background-color: #262730;
+    color: #FAFAFA;
+    border-radius: 5px;
+    border: 1px solid #FF4B4B;
+}
+
+/* Button styling */
+.stButton > button {
+    background: linear-gradient(90deg, #FF4B4B 0%, #FF8F8F 100%);
+    color: #FAFAFA;
+    border: none;
+    border-radius: 5px;
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    transition: all 0.3s;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 75, 75, 0.3);
+}
+
+/* Metrics and KPIs */
+.stMetric {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 1rem;
+    border-left: 4px solid #FF4B4B;
+}
+
+/* Tables */
+.dataframe {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+/* Loading animation */
+.stProgress .st-bo {
+    background-color: #FF4B4B;
+}
